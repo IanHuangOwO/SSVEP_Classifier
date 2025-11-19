@@ -1,0 +1,77 @@
+{
+  "data_param": {
+    "Number_of_Subjects": 10,     
+    "Window_Size": 4.0,
+    "Sample_Frequency": 256,
+    "Number_of_Targets": 12,
+    "Number_of_Trials": 15,
+    "Number_of_Channels": 8,
+    "stimulus_hz": {
+      "0": "9.25",
+      "3": "9.75",
+      "6": "10.25",
+      "9": "10.75",
+      "1": "11.25",
+      "4": "11.75",
+      "7": "12.25",
+      "10": "12.75",
+      "2": "13.25",
+      "5": "13.75",
+      "8": "14.25",
+      "11": "14.75"
+    },
+    "channel_names": {
+      "0": "O1",
+      "1": "Oz",
+      "2": "O2",
+      "3": "PO3",
+      "4": "POz",
+      "5": "PO4",
+      "6": "PO7",
+      "7": "PO8"
+    }
+  }
+  ,
+  "data_structure": {
+    "1": {
+      "signals": "./Dial/signals/DataSub_1.mat",
+      "labels": "./Dial/labels/LabSub_1.mat"
+    },
+    "2": {
+      "signals": "./Dial/signals/DataSub_2.mat",
+      "labels": "./Dial/labels/LabSub_2.mat"
+    },
+    "3": {
+      "signals": "./Dial/signals/DataSub_3.mat",
+      "labels": "./Dial/labels/LabSub_3.mat"
+    },
+    "4": {
+      "signals": "./Dial/signals/DataSub_4.mat",
+      "labels": "./Dial/labels/LabSub_4.mat"
+    },
+    "5": {
+      "signals": "./Dial/signals/DataSub_5.mat",
+      "labels": "./Dial/labels/LabSub_5.mat"
+    },
+    "6": {
+      "signals": "./Dial/signals/DataSub_6.mat",
+      "labels": "./Dial/labels/LabSub_6.mat"
+    },
+    "7": {
+      "signals": "./Dial/signals/DataSub_7.mat",
+      "labels": "./Dial/labels/LabSub_7.mat"
+    },
+    "8": {
+      "signals": "./Dial/signals/DataSub_8.mat",
+      "labels": "./Dial/labels/LabSub_8.mat"
+    },
+    "9": {
+      "signals": "./Dial/signals/DataSub_9.mat",
+      "labels": "./Dial/labels/LabSub_9.mat"
+    },
+    "10": {
+      "signals": "./Dial/signals/DataSub_10.mat",
+      "labels": "./Dial/labels/LabSub_10.mat"
+    }
+  }
+}
