@@ -4,75 +4,95 @@ import os
 import json
 import torch
 
-def _visualize_per_label(dataset, channel_names, stimulus_map, data_params):
+def _visualize_per_label(dataset, channel_names, stimulus_map, config):
     """Handles the logic for plotting one feature map per label."""
     sorted_stimuli = sorted(stimulus_map.items(), key=lambda item: float(item[1]))
     sorted_labels = [int(item[0]) for item in sorted_stimuli]
 
     # --- Get FFT parameters from data_params ---
-    Fs = data_params['Sample_Frequency']
-    Ws = data_params['Window_Size']
+    model_name = config['training_params']['model_name']
+    model_params = config['model_params'][model_name]
+    data_metadata = config['data_metadata']
+    Fs = data_metadata['Sample_Frequency']
+    Ws = data_metadata['Window_Size']
     Tp = int(Ws * Fs)
+    
+    preprocess_method = model_params.get('preprocess_method', 'fft')
 
-    resolution, start_freq, end_freq = 0.2, 8, 64
-    nfft = round(Fs / resolution)
-    fft_index_start = int(round(start_freq / resolution))
-    fft_index_end = int(round(end_freq / resolution))
+    # --- Pre-calculate all feature data to find global color scale ---
+    all_feature_data = []
+    if preprocess_method == 'fft':
+        resolution = model_params['resolution']
+        start_freq, end_freq = model_params['start_freq'], model_params['end_freq']
+        nfft = round(Fs / resolution)
+        fft_index_start = int(round(start_freq / resolution))
+        fft_index_end = int(round(end_freq / resolution))
 
-    # --- Pre-calculate all FFT data to find global color scale ---
-    all_fft_data = []
-    for label_to_find in sorted_labels:
-        try:
-            # Find the first trial with the desired label
-            trial_index = (dataset.label_data == label_to_find).nonzero(as_tuple=True)[0][0].item()
-            raw_eeg_tensor, _ = dataset[trial_index] # This now returns raw data
-            
-            # Perform the same FFT as the collate_fn
-            fft_result = torch.fft.fft(raw_eeg_tensor, n=nfft, dim=-1) / (Tp / 2)
-            magnitudes = torch.abs(fft_result[..., fft_index_start:fft_index_end]).squeeze(0).numpy()
-            # Freq axis is constant, so we don't need to store it per sample
-            all_fft_data.append({'magnitudes': magnitudes, 'label': label_to_find})
-        except IndexError:
-            continue # Skip if label not found
+        for label_to_find in sorted_labels:
+            try:
+                trial_index = (dataset.label_data == label_to_find).nonzero(as_tuple=True)[0][0].item()
+                raw_eeg_tensor, _ = dataset[trial_index]
+                
+                fft_result = torch.fft.fft(raw_eeg_tensor, n=nfft, dim=-1) / (Tp / 2)
+                magnitudes = torch.abs(fft_result[..., fft_index_start:fft_index_end]).squeeze(0).numpy()
+                all_feature_data.append({'features': magnitudes, 'label': label_to_find})
+            except IndexError:
+                continue
+    elif preprocess_method == 'raw':
+        for label_to_find in sorted_labels:
+            try:
+                trial_index = (dataset.label_data == label_to_find).nonzero(as_tuple=True)[0][0].item()
+                raw_eeg_tensor, _ = dataset[trial_index]
+                all_feature_data.append({'features': raw_eeg_tensor.squeeze(0).numpy(), 'label': label_to_find})
+            except IndexError:
+                continue
 
-    if not all_fft_data:
+    if not all_feature_data:
         print("No trials found for the specified labels.")
         return
 
-    # Calculate global min/max from the pre-calculated numerical data. No figures are created here.
-    global_min = min(data['magnitudes'].min() for data in all_fft_data)
-    global_max = max(data['magnitudes'].max() for data in all_fft_data)
+    # Calculate global min/max from the pre-calculated numerical data.
+    global_min = min(data['features'].min() for data in all_feature_data)
+    global_max = max(data['features'].max() for data in all_feature_data)
 
     # --- Create the grid plot ---
     nrows, ncols = 4, 3
     fig, axes = plt.subplots(nrows, ncols, figsize=(20, 15))
-    fig.suptitle(f'Feature Magnitude Maps - Subject {dataset.subject_list} - One Trial Per Label', fontsize=16)
+    fig.suptitle(f'Feature Maps (Method: {preprocess_method.upper()}) - Subject {dataset.subject_list} - One Trial Per Label', fontsize=16)
     axes = axes.flatten()
 
-    for i, data in enumerate(all_fft_data):
+    for i, data in enumerate(all_feature_data):
         ax = axes[i]
         label = data['label']
         stimulus_hz = stimulus_map.get(str(label), "Unknown")
         
-        num_freq_bins = data['magnitudes'].shape[-1]
-        freq_axis = np.linspace(8, 64, num=num_freq_bins, endpoint=False)
+        if preprocess_method == 'fft':
+            num_bins = data['features'].shape[-1]
+            start_freq, end_freq = model_params['start_freq'], model_params['end_freq']
+            axis = np.linspace(start_freq, end_freq, num=num_bins, endpoint=False)
+            xlabel = 'Frequency (Hz)'
+            if stimulus_hz != "Unknown":
+                ax.axvline(x=float(stimulus_hz), color='r', linestyle='--')
+        elif preprocess_method == 'raw':
+            num_bins = data['features'].shape[-1]
+            axis = np.linspace(0, Ws, num=num_bins, endpoint=False)
+            xlabel = 'Time (s)'
 
-        # Plot the pre-calculated FFT data
-        im = ax.imshow(data['magnitudes'], aspect='auto', cmap='viridis',
-                       extent=[freq_axis[0], freq_axis[-1], dataset.Nc - 0.5, -0.5],
+        # Plot the pre-calculated feature data
+        im = ax.imshow(data['features'], aspect='auto', cmap='viridis',
+                       extent=[axis[0], axis[-1], dataset.Nc - 0.5, -0.5],
                        vmin=global_min, vmax=global_max)
         
         ax.set_yticks(ticks=np.arange(dataset.Nc), labels=channel_names)
-        if stimulus_hz != "Unknown":
-            ax.axvline(x=float(stimulus_hz), color='r', linestyle='--')
-
         ax.set_title(f'Label: {label} ({stimulus_hz} Hz)')
+        if i >= (nrows - 1) * ncols: # Only show x-label on bottom row
+            ax.set_xlabel(xlabel)
 
     # --- Final figure adjustments ---
     fig.subplots_adjust(bottom=0.15, hspace=0.4, wspace=0.3)
     
     # Common labels
-    fig.text(0.5, 0.04, 'Frequency (Hz)', ha='center', va='center', fontsize=14)
+    fig.text(0.5, 0.04, xlabel, ha='center', va='center', fontsize=14)
     fig.text(0.06, 0.5, 'Channel', ha='center', va='center', rotation='vertical', fontsize=14)
 
     # Shared colorbar at the bottom
@@ -81,219 +101,213 @@ def _visualize_per_label(dataset, channel_names, stimulus_map, data_params):
     sm = plt.cm.ScalarMappable(cmap='viridis', norm=norm)
     fig.colorbar(sm, cax=cbar_ax, orientation='horizontal')
 
-def visualize_eeg_data(dataset, dataset_metadata_path, mode='per_label', save_dir=None):
+def visualize_eeg_data(dataset, config: dict, mode='per_label', save_dir=None):
     """
     Visualizes transformed EEG features from a dataset.
 
     Args:
         dataset (Dataset): The EEG dataset object containing RAW time-series data.
-        dataset_metadata_path (str): Path to the metadata JSON file.
+        config (dict): The unified configuration dictionary.
         mode (str): Currently only 'per_label' is supported for feature visualization.
         save_dir (str, optional): Directory to save the figure. If None, shows the plot. Defaults to None.
     """
-    # --- Load metadata from the provided path ---
-    with open(dataset_metadata_path, 'r') as f:
-        metadata = json.load(f)
-    
-    data_params = metadata['data_param']    
+    data_metadata = config['data_metadata']
     channel_names = dataset.channel_names # Use the selected channel names from the dataset object
-    stimulus_map = data_params['stimulus_hz']
+    stimulus_map = data_metadata['stimulus_hz']
 
     if mode == 'per_label':
-        _visualize_per_label(dataset, channel_names, stimulus_map, data_params)
+        _visualize_per_label(dataset, channel_names, stimulus_map, config)
     else:
         raise ValueError("Invalid mode. Only 'per_label' is currently supported for feature visualization.")
 
     if save_dir:
         subject_str = "_".join(map(str, dataset.subject_list))
-        save_path = os.path.join(save_dir, f'feature_map_S{subject_str}.png')
+        model_name = config['training_params']['model_name']
+        preprocess_method = config['model_params'][model_name].get('preprocess_method', 'fft')
+        save_path = os.path.join(save_dir, f'feature_map_{preprocess_method}_S{subject_str}.png')
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Feature map saved to {save_path}")
         plt.close()
     else:
         plt.show()
-
-def plot_attention_maps(model, dataset, dataset_metadata_path, preprocess_fn, save_dir=None, subject_id=None, train_subject_id=None):
-    """
-    Visualizes the model's attention weights on the input channels for one trial of each label.
-
-    Args:
-        model (torch.nn.Module): The trained model, which must return attention weights.
-        dataset (Dataset): The dataset to visualize, with transforms applied.
-        dataset_metadata_path (str): Path to the metadata JSON file.
-        preprocess_fn (callable): The collate function used to preprocess raw data.
-        save_dir (str, optional): Directory to save the figure. If None, shows the plot.
-        subject_id (int, optional): The validation subject ID.
-        train_subject_id (int, optional): The training subject ID (for inter-subject mode).
-    """
-    # --- Load metadata ---
-    with open(dataset_metadata_path, 'r') as f:
-        metadata = json.load(f)
+        
+def plot_attention_visuals(model, dataset, config: dict, preprocess_fn, save_dir=None, subject_id=None, train_subject_id=None):
+    """Generates comprehensive attention visualizations: a grid of individual 2D attention
+    maps for each label, and a single plot of the average 'general strategy' attention."""
+    stimulus_map = config['data_metadata']['stimulus_hz']
+    model_name = config['training_params']['model_name']
+    model_params = config['model_params'][model_name]
+    preprocess_method = model_params.get('preprocess_method', 'fft')
     
-    data_params = metadata['data_param']
-    # channel_names are not needed for token-based attention plots
-    stimulus_map = data_params['stimulus_hz']
+    device = next(model.parameters()).device
+    model.eval()
 
-    # --- Prepare for plotting ---
+    # --- 1. Collect attention maps for all labels ---
+    all_attention_maps = []
     sorted_stimuli = sorted(stimulus_map.items(), key=lambda item: float(item[1]))
     sorted_labels = [int(item[0]) for item in sorted_stimuli]
 
-    # --- Set model to evaluation mode ---
-    device = next(model.parameters()).device
-    model.eval()
-
-    # --- Collect data for each label ---
-    all_attention_weights = []
     with torch.no_grad():
         for label_to_find in sorted_labels:
-            try:
-                trial_index = (dataset.label_data == label_to_find).nonzero(as_tuple=True)[0][0].item()
-                raw_eeg_tensor, label_tensor = dataset[trial_index] # Shape: (1, Nc, Tp)
-
-                # --- Use the provided preprocess_fn on a single-item batch ---
-                # The collate_fn expects a list of samples (a batch)
-                feature_tensor, _ = preprocess_fn([(raw_eeg_tensor, label_tensor)])
-
-                # Assumes model returns (output, attention_weights)
-                feature_tensor = feature_tensor.to(device) # The collate_fn already creates a batch
-                _ = model(feature_tensor) # Run forward pass to populate attention weights
-
-                # Directly access the stored weights from the model's internal layer
-                attention_weights = model.encoder.layers[0].attn.attention_weights
-                
-                # The raw attention weights have shape (num_tokens, feature_dim).
-                # We average across the feature dimension to get a single "importance score" per token
-                # for high-level visualization.
-                all_attention_weights.append(attention_weights.mean(dim=-1).squeeze().cpu().numpy())
-            except (IndexError, TypeError): # TypeError if model doesn't return tuple
-                print(f"Could not get attention for label {label_to_find}. Skipping.")
+            # Find ALL trial indices for the current label
+            trial_indices = (dataset.label_data == label_to_find).nonzero(as_tuple=True)[0]
+            
+            if len(trial_indices) == 0:
+                print(f"Warning: No trials found for label {label_to_find}. Skipping.")
                 continue
 
-    if not all_attention_weights:
-        print("Could not generate any attention maps. Ensure the model returns attention weights and labels are present.")
+            label_specific_maps = []
+            for trial_index in trial_indices:
+                try:
+                    raw_eeg_tensor, label_tensor = dataset[trial_index.item()]
+                    
+                    feature_tensor, _ = preprocess_fn([(raw_eeg_tensor, label_tensor)])
+                    feature_tensor = feature_tensor.to(device)
+                    
+                    _ = model(feature_tensor) # Forward pass to populate weights
+                    
+                    raw_attention_weights = model.encoder.layers[0].attn.attention_weights.squeeze(0).cpu().numpy()
+
+                    if preprocess_method == 'fft':
+                        # The attention is on the concatenated [real, imag] parts.
+                        # We need to combine them to get attention per frequency bin.
+                        num_freq_bins = raw_attention_weights.shape[1] // 2
+                        attn_real = raw_attention_weights[:, :num_freq_bins]
+                        attn_imag = raw_attention_weights[:, num_freq_bins:]
+                        # Calculate the magnitude of attention for each frequency bin
+                        attention_magnitude = np.sqrt(attn_real**2 + attn_imag**2)
+                        label_specific_maps.append(attention_magnitude)
+                    else: # 'raw' method
+                        label_specific_maps.append(raw_attention_weights)
+                except (IndexError, AttributeError):
+                    # This handles cases where a specific trial fails or attention weights aren't available
+                    continue
+                
+            if label_specific_maps:
+                # Average the attention maps for this label and append
+                avg_label_map = np.mean(label_specific_maps, axis=0)
+                all_attention_maps.append({'label': label_to_find, 'weights': avg_label_map})
+    
+    if not all_attention_maps:
+        print("Could not generate any 2D attention maps.")
         return
 
-    # --- Average the weights across all collected trials ---
-    avg_attention_weights = np.mean(all_attention_weights, axis=0)
-    num_tokens = len(avg_attention_weights)
-    token_labels = [f'Token {j}' for j in range(num_tokens)]
+    # --- 2. Plot the grid of individual attention maps with marginals ---
+    nrows, ncols = 4, 3
+    nrows, ncols = 3, 4
+    fig_grid = plt.figure(figsize=(30, 22), constrained_layout=True)
+    fig_grid.suptitle(f'Individual 2D Attention Maps with Marginals ({preprocess_method.upper()}) - Val S{subject_id}', fontsize=20)
+    main_gs = fig_grid.add_gridspec(nrows, ncols, wspace=0.5, hspace=0.6)
 
-    # --- Create a single plot for the average attention ---
-    fig, ax = plt.subplots(figsize=(12, 7))
-    
-    ax.bar(np.arange(num_tokens), avg_attention_weights, color='skyblue')
-    ax.set_xticks(np.arange(num_tokens))
-    ax.set_xticklabels(token_labels, rotation=45, ha="right")
-    ax.grid(axis='y', linestyle='--', alpha=0.7)
-    ax.set_ylabel("Average Attention Weight")
-    ax.set_xlabel("Token")
+    for i, data in enumerate(all_attention_maps):
+        weights = data['weights']
+        label = data['label']
+        actual_hz = stimulus_map.get(str(label), "Unknown")
 
-    # --- Final figure adjustments ---
-    if train_subject_id:
-        title = f"Average Attention Map: Inter-Subject on Val S{subject_id}"
-        filename = f"attention_map_inter_subject_val_S{subject_id}.png"
-    else:
-        title = f"Average Attention Map: Intra-Subject on Val S{subject_id}"
-        filename = f"attention_map_intra_subject_val_S{subject_id}.png"
-    
-    ax.set_title(title, fontsize=16)
-    fig.tight_layout()
+        # Create a nested GridSpec for each subplot
+        nested_gs = main_gs[i].subgridspec(2, 2, width_ratios=(4, 1), height_ratios=(1, 4), wspace=0.05, hspace=0.05)
+        ax_heatmap = fig_grid.add_subplot(nested_gs[1, 0])
+        ax_bar_x = fig_grid.add_subplot(nested_gs[0, 0], sharex=ax_heatmap)
+        ax_bar_y = fig_grid.add_subplot(nested_gs[1, 1], sharey=ax_heatmap)
+
+        # --- Calculate marginals for this specific map ---
+        feature_attention = weights.mean(axis=0)
+        token_attention = weights.mean(axis=1)
+
+        num_tokens, num_bins = weights.shape
+        token_labels = [f'T{j}' for j in range(num_tokens)]
+
+        if preprocess_method == 'fft':
+            start_freq, end_freq = model_params['start_freq'], model_params['end_freq']
+            feature_axis = np.linspace(start_freq, end_freq, num=num_bins, endpoint=False)
+            ax_heatmap.set_xlabel("Frequency (Hz)")
+        else: # 'raw'
+            Ws = config['data_metadata']['Window_Size']
+            feature_axis = np.linspace(0, Ws, num=num_bins, endpoint=False)
+            ax_heatmap.set_xlabel("Time (s)")
+
+        # --- Plot the components ---
+        # Heatmap
+        ax_heatmap.imshow(weights, aspect='auto', cmap='coolwarm', extent=[feature_axis[0], feature_axis[-1], num_tokens - 0.5, -0.5])
+        ax_heatmap.set_yticks(ticks=np.arange(num_tokens), labels=token_labels)
+        ax_heatmap.set_ylabel("Tokens")
+
+        # Top bar graph
+        ax_bar_x.bar(feature_axis, feature_attention, width=(feature_axis[1]-feature_axis[0])*0.8, color='skyblue')
+        ax_bar_x.tick_params(axis="x", labelbottom=False)
+        ax_bar_x.set_ylabel("Avg Attention")
+        ax_bar_x.set_title(f'Label: {label} ({actual_hz} Hz)')
+
+        # Right bar graph
+        ax_bar_y.barh(np.arange(num_tokens), token_attention, height=0.8, color='salmon')
+        ax_bar_y.tick_params(axis="y", labelleft=False)
+        ax_bar_y.set_xlabel("Avg Attention")
 
     if save_dir:
+        mode_str = "inter" if train_subject_id else "intra"
+        filename = f"attention_grid_2d_{preprocess_method}_{mode_str}_S{subject_id}.png"
         save_path = os.path.join(save_dir, filename)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Attention map plot saved to {save_path}")
-        plt.close()
+        fig_grid.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"2D Attention grid saved to {save_path}")
+        plt.close(fig_grid)
     else:
         plt.show()
 
-def plot_2d_attention_heatmap(model, dataset, dataset_metadata_path, preprocess_fn, save_dir=None, subject_id=None, train_subject_id=None):
-    """
-    Visualizes the full 2D attention map for trials 0 and 11 in a 2x2 subplot.
-    The top row shows the full frequency range, the bottom row is zoomed to 8-20 Hz.
+    # --- 3. Calculate and plot the average "general strategy" attention map ---
+    average_weights = np.mean([d['weights'] for d in all_attention_maps], axis=0)
+    
+    # Create the marginal plot for the average
+    try:
+        num_tokens, num_bins = average_weights.shape
+        token_labels = [f'Token {j}' for j in range(num_tokens)]
 
-    Args:
-        model (torch.nn.Module): The trained model.
-        dataset (Dataset): The dataset containing raw data.
-        dataset_metadata_path (str): Path to the metadata JSON file.
-        preprocess_fn (callable): The collate function to preprocess the raw data.
-        save_dir (str, optional): Directory to save the figure. Defaults to None.
-        subject_id (int, optional): The validation subject ID.
-        train_subject_id (int, optional): The training subject ID (for inter-subject mode).
-    """
-    with open(dataset_metadata_path, 'r') as f:
-        metadata = json.load(f)
-    stimulus_map = metadata['data_param']['stimulus_hz']
+        feature_attention = average_weights.mean(axis=0)
+        token_attention = average_weights.mean(axis=1)
 
-    device = next(model.parameters()).device
-    model.eval()
+        if preprocess_method == 'fft':
+            start_freq, end_freq = model_params['start_freq'], model_params['end_freq']
+            feature_axis = np.linspace(start_freq, end_freq, num=num_bins, endpoint=False)
+            xlabel = "Frequency Bins (Hz)"
+        else: # 'raw'
+            Ws = config['data_metadata']['Window_Size']
+            feature_axis = np.linspace(0, Ws, num=num_bins, endpoint=False)
+            xlabel = "Time (s)"
 
-    fig, axes = plt.subplots(2, 2, figsize=(20, 12))
-    labels_to_find = [0, 11]
+        fig_avg = plt.figure(figsize=(12, 12))
+        gs = fig_avg.add_gridspec(2, 2, width_ratios=(4, 1), height_ratios=(1, 4),
+                                left=0.1, right=0.9, bottom=0.1, top=0.9,
+                                wspace=0.05, hspace=0.05)
+        
+        ax_heatmap = fig_avg.add_subplot(gs[1, 0])
+        ax_bar_x = fig_avg.add_subplot(gs[0, 0], sharex=ax_heatmap)
+        ax_bar_y = fig_avg.add_subplot(gs[1, 1], sharey=ax_heatmap)
 
-    for i, label_to_find in enumerate(labels_to_find):
-        try:
-            # Find the index of the first trial with the desired label
-            trial_index = (dataset.label_data == label_to_find).nonzero(as_tuple=True)[0][0].item()
+        ax_heatmap.imshow(average_weights, aspect='auto', cmap='coolwarm', extent=[feature_axis[0], feature_axis[-1], num_tokens - 0.5, -0.5])
+        ax_heatmap.set_yticks(ticks=np.arange(num_tokens), labels=token_labels)
+        ax_heatmap.set_xlabel(xlabel)
+        ax_heatmap.set_ylabel("Tokens")
 
-            with torch.no_grad():
-                raw_eeg_tensor, label_tensor = dataset[trial_index]
-                actual_label = label_tensor.item()
-                actual_hz = stimulus_map.get(str(actual_label), "Unknown")
+        ax_bar_x.bar(feature_axis, feature_attention, width=(feature_axis[1]-feature_axis[0])*0.8, color='skyblue')
+        ax_bar_x.tick_params(axis="x", labelbottom=False)
+        ax_bar_x.set_ylabel("Avg Attention")
 
-                feature_tensor, _ = preprocess_fn([(raw_eeg_tensor, label_tensor)])
-                feature_tensor = feature_tensor.to(device)
+        ax_bar_y.barh(np.arange(num_tokens), token_attention, height=0.8, color='salmon')
+        ax_bar_y.tick_params(axis="y", labelleft=False)
+        ax_bar_y.set_xlabel("Avg Attention")
 
-                output = model(feature_tensor) # Run forward pass
-                predicted_label = torch.argmax(output, dim=1).item()
-                predicted_hz = stimulus_map.get(str(predicted_label), "Unknown")
+        mode_str = "Inter-Subject" if train_subject_id else "Intra-Subject"
+        fig_avg.suptitle(f'Average 2D Attention (General Strategy, {preprocess_method.upper()})\n{mode_str} on Val S{subject_id}', fontsize=16)
 
-                # Directly access the stored weights
-                raw_attention_weights = model.encoder.layers[0].attn.attention_weights.squeeze(0).cpu().numpy()
+        if save_dir:
+            filename = f"attention_average_2d_{preprocess_method}_{mode_str}_S{subject_id}.png"
+            save_path = os.path.join(save_dir, filename)
+            fig_avg.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Average 2D Attention map saved to {save_path}")
+            plt.close(fig_avg)
+        else:
+            plt.show()
 
-            num_tokens, num_freq_bins = raw_attention_weights.shape
-            freq_axis = np.linspace(8, 64, num=num_freq_bins, endpoint=False)
-            token_labels = [f'Token {j}' for j in range(num_tokens)]
-
-            # --- Plot Full Heatmap (Top Row) ---
-            ax_full = axes[0, i]
-            im = ax_full.imshow(raw_attention_weights, aspect='auto', cmap='hot', extent=[freq_axis[0], freq_axis[-1], num_tokens - 0.5, -0.5])
-            ax_full.set_yticks(ticks=np.arange(num_tokens), labels=token_labels)
-            ax_full.set_title(f'Trial with Label {label_to_find} (Full)\nActual: {actual_hz} Hz | Predicted: {predicted_hz} Hz')
-            ax_full.set_ylabel("Tokens")
-
-            # --- Plot Zoomed Heatmap (Bottom Row) ---
-            ax_zoom = axes[1, i]
-            ax_zoom.imshow(raw_attention_weights, aspect='auto', cmap='hot', extent=[freq_axis[0], freq_axis[-1], num_tokens - 0.5, -0.5])
-            ax_zoom.set_yticks(ticks=np.arange(num_tokens), labels=token_labels)
-            ax_zoom.set_title(f'Trial with Label {label_to_find} (Zoomed 8-20 Hz)')
-            ax_zoom.set_xlim(8, 20) # Zoom in on the specified frequency range
-            ax_zoom.set_xlabel("Frequency Bins (Hz)")
-            ax_zoom.set_ylabel("Tokens")
-
-        except IndexError:
-            print(f"Warning: Could not find a trial for label {label_to_find}. Skipping this subplot.")
-            axes[0, i].set_title(f'Label {label_to_find} not found')
-            axes[1, i].set_title(f'Label {label_to_find} not found')
-            axes[0, i].axis('off')
-            axes[1, i].axis('off')
-            continue
-
-    # --- Final Figure Adjustments ---
-    if train_subject_id:
-        mode_str = "Inter-Subject"
-        filename = f"attention_heatmap_2d_inter_subject_val_S{subject_id}.png"
-    else:
-        mode_str = "Intra-Subject"
-        filename = f"attention_heatmap_2d_intra_subject_val_S{subject_id}.png"
-
-    fig.suptitle(f'2D Attention Heatmaps: {mode_str} on Val S{subject_id}', fontsize=16)
-    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-
-    if save_dir:
-        save_path = os.path.join(save_dir, filename)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"2D Attention heatmap saved to {save_path}")
-        plt.close()
-    else:
-        plt.show()
+    except Exception as e:
+        print(f"Could not plot average attention map. Error: {e}")
+        if 'fig_avg' in locals():
+            plt.close(fig_avg)

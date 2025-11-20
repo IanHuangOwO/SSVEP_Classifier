@@ -88,33 +88,27 @@ class SSVEPDataset(Dataset):
       return final_eeg_data, final_label_data - 1
 
 
-def build_dataset_from_config(main_config_path: str, dataset_metadata_path: str, **kwargs):
+def build_dataset_from_config(config: dict, **kwargs):
     """
     Factory function to build the SSVEPDataset.
-    It reads JSON config files, extracts dataset parameters, and constructs the dataset object.
+    It uses a unified config object to construct the dataset.
     """
-    with open(main_config_path, 'r') as f:
-        main_config = json.load(f)
-    with open(dataset_metadata_path, 'r') as f:
-        metadata_config = json.load(f)
-    
-    # data_root is the parent directory of the directory containing the metadata.json file.
-    data_root = os.path.dirname(os.path.dirname(dataset_metadata_path))
+    data_root = config['training_params']['dataset_path']
     
     # Get parameters from the appropriate config files
-    config_params = main_config['data_params']
-    data_params = metadata_config['data_param']
+    dataset_params = config['dataset_params']
+    data_metadata = config['data_metadata']
     subject_list = kwargs.get('subject_list', [1])
 
     return SSVEPDataset(
         data_root=data_root,
-        data_structure=metadata_config['data_structure'],
-        all_channel_names=data_params['channel_names'],
-        desired_channels=config_params['channels'],
-        trials_to_use=config_params['trials_to_use'],
-        Nf=data_params['Number_of_Targets'],
-        Nt=data_params['Number_of_Trials'],
-        Ws=data_params['Window_Size'],
-        Fs=data_params['Sample_Frequency'],
+        data_structure=config['data_structure'],
+        all_channel_names=data_metadata['channel_names'],
+        desired_channels=dataset_params['channels'],
+        trials_to_use=dataset_params['trials_to_use'],
+        Nf=data_metadata['Number_of_Targets'],
+        Nt=data_metadata['Number_of_Trials'],
+        Ws=data_metadata['Window_Size'],
+        Fs=data_metadata['Sample_Frequency'],
         subject_list=subject_list
     )

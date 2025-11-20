@@ -1,6 +1,6 @@
 {
-  "data_param": {
-    "Number_of_Subjects": 10,     
+  "data_metadata": {
+    "Number_of_Subjects": 10,
     "Window_Size": 4.0,
     "Sample_Frequency": 256,
     "Number_of_Targets": 12,
@@ -34,44 +34,44 @@
   ,
   "data_structure": {
     "1": {
-      "signals": "./Dial/signals/DataSub_1.mat",
-      "labels": "./Dial/labels/LabSub_1.mat"
+      "signals": "signals/DataSub_1.mat",
+      "labels": "labels/LabSub_1.mat"
     },
     "2": {
-      "signals": "./Dial/signals/DataSub_2.mat",
-      "labels": "./Dial/labels/LabSub_2.mat"
+      "signals": "signals/DataSub_2.mat",
+      "labels": "labels/LabSub_2.mat"
     },
     "3": {
-      "signals": "./Dial/signals/DataSub_3.mat",
-      "labels": "./Dial/labels/LabSub_3.mat"
+      "signals": "signals/DataSub_3.mat",
+      "labels": "labels/LabSub_3.mat"
     },
     "4": {
-      "signals": "./Dial/signals/DataSub_4.mat",
-      "labels": "./Dial/labels/LabSub_4.mat"
+      "signals": "signals/DataSub_4.mat",
+      "labels": "labels/LabSub_4.mat"
     },
     "5": {
-      "signals": "./Dial/signals/DataSub_5.mat",
-      "labels": "./Dial/labels/LabSub_5.mat"
+      "signals": "signals/DataSub_5.mat",
+      "labels": "labels/LabSub_5.mat"
     },
     "6": {
-      "signals": "./Dial/signals/DataSub_6.mat",
-      "labels": "./Dial/labels/LabSub_6.mat"
+      "signals": "signals/DataSub_6.mat",
+      "labels": "labels/LabSub_6.mat"
     },
     "7": {
-      "signals": "./Dial/signals/DataSub_7.mat",
-      "labels": "./Dial/labels/LabSub_7.mat"
+      "signals": "signals/DataSub_7.mat",
+      "labels": "labels/LabSub_7.mat"
     },
     "8": {
-      "signals": "./Dial/signals/DataSub_8.mat",
-      "labels": "./Dial/labels/LabSub_8.mat"
+      "signals": "signals/DataSub_8.mat",
+      "labels": "labels/LabSub_8.mat"
     },
     "9": {
-      "signals": "./Dial/signals/DataSub_9.mat",
-      "labels": "./Dial/labels/LabSub_9.mat"
+      "signals": "signals/DataSub_9.mat",
+      "labels": "labels/LabSub_9.mat"
     },
     "10": {
-      "signals": "./Dial/signals/DataSub_10.mat",
-      "labels": "./Dial/labels/LabSub_10.mat"
+      "signals": "signals/DataSub_10.mat",
+      "labels": "labels/LabSub_10.mat"
     }
   }
 }

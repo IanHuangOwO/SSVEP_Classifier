@@ -168,7 +168,7 @@ def plot_accuracy_matrix(accuracy_matrix, subject_list, title='Subject-to-Subjec
     matrix = np.array([[accuracy_matrix[train_id][val_id] for val_id in subject_list] for train_id in subject_list])
 
     fig, ax = plt.subplots(figsize=(10, 8))
-    im = ax.imshow(matrix, cmap='hot', interpolation='nearest')
+    im = ax.imshow(matrix, cmap='coolwarm', interpolation='nearest')
 
     # Create colorbar
     cbar = ax.figure.colorbar(im, ax=ax)

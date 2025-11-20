@@ -3,39 +3,56 @@ import torch.nn as nn
 from torch import Tensor
 import torch
 
-def preprocess_collate_fn(config_path: str):
+def preprocess_collate_fn(config: dict):
     """
     Creates a collate_fn for a DataLoader that preprocesses raw EEG data.
-    This function reads data parameters from the config to configure the FFT
-    transformation required by the SSVEP_CASViT model.
+    This function uses a unified config object for FFT parameters.
     """
-    with open(config_path, 'r') as f:
-        config = json.load(f)
     
-    data_params = config['data_param']
-    Fs = data_params['Sample_Frequency']
-    Ws = data_params['Window_Size']
+    model_name = config['training_params']['model_name']
+    model_params = config['model_params'][model_name]
+    data_metadata = config['data_metadata']
+
+    Fs = data_metadata['Sample_Frequency']
+    Ws = data_metadata['Window_Size']
     Tp = int(Ws * Fs)
 
-    # FFT parameters
-    resolution, start_freq, end_freq = 0.2, 8, 64
-    nfft = round(Fs / resolution)
-    fft_index_start = int(round(start_freq / resolution))
-    fft_index_end = int(round(end_freq / resolution))
+    preprocess_method = model_params.get('preprocess_method', 'fft') # Default to 'fft'
 
-    def fft_preprocess_collate_fn(batch):
-        """
-        Takes a batch of (raw_eeg, label), applies FFT to raw_eeg, and returns tensors.
-        """
-        eeg_data = torch.stack([item[0] for item in batch]) # Shape: (B, 1, Nc, Tp)
-        labels = torch.stack([item[1] for item in batch])   # Shape: (B, 1)
+    if preprocess_method == 'fft':
+        # FFT parameters
+        resolution = model_params['resolution']
+        start_freq, end_freq = model_params['start_freq'], model_params['end_freq']
+        nfft = round(Fs / resolution)
+        fft_index_start = int(round(start_freq / resolution))
+        fft_index_end = int(round(end_freq / resolution))
 
-        fft_result = torch.fft.fft(eeg_data, n=nfft, dim=-1) / (Tp / 2)
-        real_part = torch.real(fft_result[..., fft_index_start:fft_index_end])
-        imag_part = torch.imag(fft_result[..., fft_index_start:fft_index_end])
-        features = torch.cat([real_part, imag_part], dim=-1).float()
-        return features, labels
-    return fft_preprocess_collate_fn
+        def fft_preprocess_collate_fn(batch):
+            """
+            Takes a batch of (raw_eeg, label), applies FFT to raw_eeg, and returns tensors.
+            """
+            eeg_data = torch.stack([item[0] for item in batch])
+            labels = torch.stack([item[1] for item in batch])
+
+            fft_result = torch.fft.fft(eeg_data, n=nfft, dim=-1) / (Tp / 2)
+            real_part = torch.real(fft_result[..., fft_index_start:fft_index_end])
+            imag_part = torch.imag(fft_result[..., fft_index_start:fft_index_end])
+            features = torch.cat([real_part, imag_part], dim=-1).float()
+            return features, labels
+        return fft_preprocess_collate_fn
+
+    elif preprocess_method == 'raw':
+        def raw_preprocess_collate_fn(batch):
+            """
+            Takes a batch of (raw_eeg, label) and returns them as stacked tensors without FFT.
+            """
+            eeg_data = torch.stack([item[0] for item in batch]).float()
+            labels = torch.stack([item[1] for item in batch])
+            return eeg_data, labels
+        return raw_preprocess_collate_fn
+    
+    else:
+        raise ValueError(f"Unsupported preprocess_method: '{preprocess_method}'")
 
 class PatchEmbedding(nn.Module):
     """
@@ -72,11 +89,10 @@ class CASA(nn.Module):
 
         # Kernel generator network: generates a kernel from each token's frequency content (d_model).
         self.kernel_generator = nn.Sequential(
-            nn.Linear(d_model, d_model // 4),
+            nn.Linear(d_model, d_model),
             nn.GELU(),
-            # Generate weights for a simple linear attention
-            nn.Linear(d_model // 4, d_model),
-            nn.Sigmoid() # Constrain weights to [0, 1]
+            nn.Linear(d_model, d_model),
+            # nn.Sigmoid() # Constrain weights to [0, 1]
         )
 
         # Static depth-wise convolution to capture local patterns across tokens
@@ -193,7 +209,6 @@ class SSVEP_CASViT(nn.Module):
             depth=depth, d_model=token_dim, num_tokens=token_num, 
             kernel_size=attention_kernel_size, dropout=dropout
         )
-        self.attention_weights = None # To store weights for visualization
 
         self.mlp_head = nn.Sequential(
             nn.Flatten(),
@@ -235,33 +250,45 @@ class SSVEP_CASViT(nn.Module):
         
         return output
     
-def build_model_from_config(main_config_path: str) -> SSVEP_CASViT:
+def build_model_from_config(config: dict) -> SSVEP_CASViT:
     """
     Factory function to build the SSVEP_CASViT model from a JSON config file.
 
     Args:
-        main_config_path (str): Path to the main JSON configuration file (e.g., config.json).
-        data_config_path (str): Path to the data-specific metadata file (e.g., metadata.json).
+        config (dict): The unified configuration dictionary.
 
     Returns:
         SSVEP_CASViT: An instance of the SSVEP_CASViT model.
     """
-    with open(main_config_path, 'r') as f:
-        main_config = json.load(f)
+    model_specific_params = config['model_params']['SSVEP_CASViT']
+    dataset_params = config['dataset_params']
+    metadata_params = config['data_metadata']
 
-    model_specific_params = main_config['model_params']['SSVEP_CASViT']
-    # These params are constant for a given model architecture, defined in the main config
-    data_dependent_params = main_config['data_params']
+    # --- Dynamically calculate token_dim based on preprocessing method ---
+    preprocess_method = model_specific_params.get('preprocess_method', 'fft')
+    if preprocess_method == 'fft':
+        resolution = model_specific_params['resolution']
+        start_freq = model_specific_params['start_freq']
+        end_freq = model_specific_params['end_freq']
+        fft_index_start = int(round(start_freq / resolution))
+        fft_index_end = int(round(end_freq / resolution))
+        # Multiply by 2 for real and imaginary parts
+        token_dim = (fft_index_end - fft_index_start) * 2
+    elif preprocess_method == 'raw':
+        # For raw data, the feature dimension is the number of time points
+        token_dim = int(metadata_params['Window_Size'] * metadata_params['Sample_Frequency'])
+    else:
+        raise ValueError(f"Unsupported preprocess_method: '{preprocess_method}'")
     
     # Explicitly pass arguments for clarity and robustness
     return SSVEP_CASViT(
         depth=model_specific_params['depth'],
         attention_kernel_size=model_specific_params['attention_kernel_size'],
         dropout=model_specific_params['dropout'],
-        chs_num=len(data_dependent_params['channels']),
-        class_num=data_dependent_params['class_num'],
-        token_num=data_dependent_params['token_num'],
-        token_dim=data_dependent_params['token_dim']
+        chs_num=len(dataset_params['channels']),
+        class_num=metadata_params['Number_of_Targets'],
+        token_num=model_specific_params['token_num'],
+        token_dim=token_dim
     )
 
 if __name__ == '__main__':

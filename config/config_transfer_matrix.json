@@ -3,49 +3,40 @@
     "SSVEP_CASViT": {
       "depth": 1,
       "attention_kernel_size": 3,
-      "dropout": 0.5
+      "dropout": 0.5,
+      "token_num": 8,
+      "preprocess_method": "fft",
+      "resolution": 0.25,
+      "start_freq": 9,
+      "end_freq": 15
     },
     "SSVEPformer": {
       "depth": 1,
       "attention_kernel_size": 3,
-      "dropout": 0.3
+      "dropout": 0.3,
+      "token_num": 8,
+      "preprocess_method": "fft",
+      "resolution": 0.25,
+      "start_freq": 9,
+      "end_freq": 15
     }
   },
-
-  "data_params": {
-    "channels": [ 
-      "PO7", 
-      "PO8", 
-      "Oz", 
-      "O1", 
-      "O2"
-    ],
-    "trials_to_use": 15,
-    "class_num": 12,
-    "token_num": 8,
-    "token_dim": 560
+  "dataset_params": {
+    "channels": ["PO7", "PO8", "Oz", "O1", "O2"],
+    "trials_to_use": 10
   },
-
   "training_params": {
     "model_name": "SSVEP_CASViT",
     "dataset_path": "./datas/Dial",
     "subjects": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
     "learning_rate": 0.001,
     "epochs": 50,
-    "batch_size": 16,
-    "k_folds": 5,
+    "batch_size": 8,
     "device": "cuda"
   },
-
   "loss_params": {
-    "losses": [
-      {
-        "name": "CrossEntropyLoss",
-        "weight": 1.0
-      }
-    ]
+    "losses": [{"name": "CrossEntropyLoss", "weight": 1.0}]
   },
-
   "metrics_params": {
     "metrics": ["Accuracy"]
   }
