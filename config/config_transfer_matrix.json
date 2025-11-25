@@ -2,28 +2,30 @@
   "model_params": {
     "SSVEP_CASViT": {
       "depth": 1,
-      "attention_kernel_size": 3,
+      "embedding_kernel_size": 3,
+      "attention_kernel_size": 9,
       "dropout": 0.5,
-      "token_num": 8,
+      "token_num": 128,
       "preprocess_method": "fft",
       "resolution": 0.25,
-      "start_freq": 9,
-      "end_freq": 15
+      "start_freq": 8,
+      "end_freq": 16
     },
     "SSVEPformer": {
       "depth": 1,
-      "attention_kernel_size": 3,
-      "dropout": 0.3,
-      "token_num": 8,
+      "embedding_kernel_size": 3,
+      "attention_kernel_size": 9,
+      "dropout": 0.5,
+      "token_num": 128,
       "preprocess_method": "fft",
       "resolution": 0.25,
-      "start_freq": 9,
-      "end_freq": 15
+      "start_freq": 8,
+      "end_freq": 16
     }
   },
   "dataset_params": {
     "channels": ["PO7", "PO8", "Oz", "O1", "O2"],
-    "trials_to_use": 10
+    "trials_to_use": 15
   },
   "training_params": {
     "model_name": "SSVEP_CASViT",

@@ -6,7 +6,7 @@ import argparse
 from IO.dataset import build_dataset_from_config
 from trainer.engine import run_training
 from utils.plot_results import plot_subject_accuracies, plot_confusion_matrix
-from utils.visualization import visualize_eeg_data, plot_attention_visuals
+from utils.visualization import visualize_eeg_data, plot_grad_cam_visuals
 
 def main():
     """
@@ -70,12 +70,17 @@ def main():
         if best_preds is not None:
             plot_confusion_matrix(best_labels, best_preds, save_dir=results_dir, subject_id=val_subject_id, title_prefix="Inter-Subject")
             
-            logger.info(f"Generating attention visualizations for validation on S{val_subject_id}...")
-            plot_attention_visuals(
-                model=trained_model, dataset=val_dataset, config=config,
-                preprocess_fn=collate_fn, save_dir=results_dir, subject_id=val_subject_id,
-                train_subject_id=train_subject_ids[0]
-            )
+            if model_name == 'SSVEP_CASViT':
+                logger.info(f"Generating Grad-CAM visualizations for validation on S{val_subject_id}...")
+                plot_grad_cam_visuals(
+                    model=trained_model, 
+                    dataset=val_dataset, 
+                    config=config,
+                    preprocess_fn=collate_fn, 
+                    save_dir=results_dir, 
+                    subject_id=val_subject_id
+                )
+
 
     logger.info("Inter-subject validation complete. Plotting results...")
     plot_subject_accuracies(

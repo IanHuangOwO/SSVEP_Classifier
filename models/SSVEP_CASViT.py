@@ -17,52 +17,54 @@ def preprocess_collate_fn(config: dict):
     Ws = data_metadata['Window_Size']
     Tp = int(Ws * Fs)
 
-    preprocess_method = model_params.get('preprocess_method', 'fft') # Default to 'fft'
+    preprocess_method = model_params.get('preprocess_method', 'frequency') # Default to 'frequency'
 
-    if preprocess_method == 'fft':
+    if 'freq' in preprocess_method or 'fft' in preprocess_method:
         # FFT parameters
         resolution = model_params['resolution']
         start_freq, end_freq = model_params['start_freq'], model_params['end_freq']
         nfft = round(Fs / resolution)
         fft_index_start = int(round(start_freq / resolution))
         fft_index_end = int(round(end_freq / resolution))
-
-        def fft_preprocess_collate_fn(batch):
-            """
-            Takes a batch of (raw_eeg, label), applies FFT to raw_eeg, and returns tensors.
-            """
+        
+        def frequency_collate_fn(batch):
             eeg_data = torch.stack([item[0] for item in batch])
             labels = torch.stack([item[1] for item in batch])
 
             fft_result = torch.fft.fft(eeg_data, n=nfft, dim=-1) / (Tp / 2)
-            real_part = torch.real(fft_result[..., fft_index_start:fft_index_end])
-            imag_part = torch.imag(fft_result[..., fft_index_start:fft_index_end])
-            features = torch.cat([real_part, imag_part], dim=-1).float()
+            fft_slice = fft_result[..., fft_index_start:fft_index_end]
+            
+            if preprocess_method == 'frequency': # Magnitude only
+                features = torch.abs(fft_slice).float()
+            elif preprocess_method == 'fft': # Real and Imaginary
+                real_part = torch.real(fft_slice)
+                imag_part = torch.imag(fft_slice)
+                features = torch.cat([real_part, imag_part], dim=-1).float()
+            else:
+                raise ValueError(f"Unsupported FFT-based preprocess_method: '{preprocess_method}'")
             return features, labels
-        return fft_preprocess_collate_fn
+        
+        return frequency_collate_fn
 
-    elif preprocess_method == 'raw':
+    elif preprocess_method == 'raw': # This is a non-FFT method
         def raw_preprocess_collate_fn(batch):
-            """
-            Takes a batch of (raw_eeg, label) and returns them as stacked tensors without FFT.
-            """
             eeg_data = torch.stack([item[0] for item in batch]).float()
             labels = torch.stack([item[1] for item in batch])
             return eeg_data, labels
         return raw_preprocess_collate_fn
-    
+
     else:
         raise ValueError(f"Unsupported preprocess_method: '{preprocess_method}'")
 
 class PatchEmbedding(nn.Module):
     """
-    Expands EEG channels into a sequence of tokens using a 1x1 convolution.
+    Expands EEG channels into a sequence of tokens using a convolution.
     This acts as the initial "patch embedding" layer for the Transformer.
     """
-    def __init__(self, in_channels: int, out_channels: int, feature_dim: int, dropout: float):
+    def __init__(self, in_channels: int, out_channels: int, feature_dim: int, dropout: float, kernel_size: int):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Conv1d(in_channels, out_channels, kernel_size=1),
+            nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, padding=kernel_size // 2),
             nn.LayerNorm(feature_dim),
             nn.GELU(),
             nn.Dropout(dropout)
@@ -92,7 +94,7 @@ class CASA(nn.Module):
             nn.Linear(d_model, d_model),
             nn.GELU(),
             nn.Linear(d_model, d_model),
-            # nn.Sigmoid() # Constrain weights to [0, 1]
+            # nn.Softmax(dim=-1) # Force a probability distribution over the feature dimension
         )
 
         # Static depth-wise convolution to capture local patterns across tokens
@@ -197,12 +199,14 @@ class SSVEP_CASViT(nn.Module):
         token_num (int): The number of tokens to create from the input channels.
         token_dim (int): The feature dimension of each token (should match FFT output).
         dropout (float): Dropout rate used throughout the model.
+        embedding_kernel_size (int): The kernel size for the initial Conv1d embedding layer.
     """
     def __init__(self, depth: int, attention_kernel_size: int, chs_num: int,
-                 class_num: int, token_num: int, token_dim: int, dropout: float):
+                 class_num: int, token_num: int, token_dim: int, dropout: float, embedding_kernel_size: int):
         super().__init__()
         self.patch_embedding = PatchEmbedding(
-            in_channels=chs_num, out_channels=token_num, feature_dim=token_dim, dropout=dropout
+            in_channels=chs_num, out_channels=token_num, feature_dim=token_dim, 
+            dropout=dropout, kernel_size=embedding_kernel_size
         )
         
         self.encoder = Encoder(
@@ -265,30 +269,32 @@ def build_model_from_config(config: dict) -> SSVEP_CASViT:
     metadata_params = config['data_metadata']
 
     # --- Dynamically calculate token_dim based on preprocessing method ---
-    preprocess_method = model_specific_params.get('preprocess_method', 'fft')
-    if preprocess_method == 'fft':
+    preprocess_method = model_specific_params.get('preprocess_method', 'frequency')
+    if preprocess_method == 'frequency':
         resolution = model_specific_params['resolution']
         start_freq = model_specific_params['start_freq']
         end_freq = model_specific_params['end_freq']
-        fft_index_start = int(round(start_freq / resolution))
-        fft_index_end = int(round(end_freq / resolution))
-        # Multiply by 2 for real and imaginary parts
-        token_dim = (fft_index_end - fft_index_start) * 2
+        token_dim = int(round(end_freq / resolution)) - int(round(start_freq / resolution))
+    elif preprocess_method == 'fft':
+        resolution = model_specific_params['resolution']
+        start_freq = model_specific_params['start_freq']
+        end_freq = model_specific_params['end_freq']
+        token_dim = 2 * (int(round(end_freq / resolution)) - int(round(start_freq / resolution)))
     elif preprocess_method == 'raw':
         # For raw data, the feature dimension is the number of time points
         token_dim = int(metadata_params['Window_Size'] * metadata_params['Sample_Frequency'])
     else:
         raise ValueError(f"Unsupported preprocess_method: '{preprocess_method}'")
-    
-    # Explicitly pass arguments for clarity and robustness
+
     return SSVEP_CASViT(
         depth=model_specific_params['depth'],
         attention_kernel_size=model_specific_params['attention_kernel_size'],
         dropout=model_specific_params['dropout'],
         chs_num=len(dataset_params['channels']),
         class_num=metadata_params['Number_of_Targets'],
-        token_num=model_specific_params['token_num'],
-        token_dim=token_dim
+        token_num=model_specific_params.get('token_num', len(dataset_params['channels'])),
+        token_dim=token_dim,
+        embedding_kernel_size=model_specific_params['embedding_kernel_size']
     )
 
 if __name__ == '__main__':

@@ -8,8 +8,8 @@ from sklearn.model_selection import KFold
 
 from IO.dataset import build_dataset_from_config
 from trainer.engine import run_training
-from utils.plot_results import plot_kfold_results, plot_subject_accuracies
-from utils.visualization import visualize_eeg_data, plot_attention_visuals
+from utils.plot_results import plot_kfold_results, plot_subject_accuracies, plot_confusion_matrix
+from utils.visualization import visualize_eeg_data, plot_grad_cam_visuals
 
 def main():
     """
@@ -82,16 +82,19 @@ def main():
 
         plot_kfold_results(histories=all_fold_histories, save_dir=results_dir, subject_id=subject_id)
         
-        logger.info("Plotting attention maps using a model trained on all data for this subject...")
+        logger.info("Plotting Grad-CAM maps using a model trained on all data for this subject...")
         fit_results, collate_fn = run_training(full_subject_dataset, full_subject_dataset, config, logger)
-        _, _, _, _, trained_model = fit_results
+        _, _, best_preds, best_labels, trained_model = fit_results
 
-        logger.info(f"Generating attention visualizations for subject {subject_id}...")
-        plot_attention_visuals(
-            model=trained_model, dataset=full_subject_dataset, config=config,
-            preprocess_fn=collate_fn, save_dir=results_dir, subject_id=subject_id,
-            train_subject_id=None # No separate train subject in intra-subject mode
-        )
+        if best_preds is not None:
+            plot_confusion_matrix(best_labels, best_preds, save_dir=results_dir, subject_id=subject_id, title_prefix="Intra-Subject (Full Data)")
+
+        if model_name == 'SSVEP_CASViT':
+            logger.info(f"Generating Grad-CAM visualizations for subject {subject_id}...")
+            plot_grad_cam_visuals(
+                model=trained_model, dataset=full_subject_dataset, config=config,
+                preprocess_fn=collate_fn, save_dir=results_dir, subject_id=subject_id
+            )
 
     logger.info("Intra-subject validation complete. Plotting final summary...")
     plot_subject_accuracies(

@@ -17,9 +17,9 @@ def preprocess_collate_fn(config: dict):
     Ws = data_metadata['Window_Size']
     Tp = int(Ws * Fs)
 
-    preprocess_method = model_params.get('preprocess_method', 'fft') # Default to 'fft'
+    preprocess_method = model_params.get('preprocess_method', 'frequency') # Default to 'frequency'
 
-    if preprocess_method == 'fft':
+    if 'freq' in preprocess_method or 'fft' in preprocess_method:
         # FFT parameters
         resolution = model_params['resolution']
         start_freq, end_freq = model_params['start_freq'], model_params['end_freq']
@@ -27,19 +27,26 @@ def preprocess_collate_fn(config: dict):
         fft_index_start = int(round(start_freq / resolution))
         fft_index_end = int(round(end_freq / resolution))
 
-        def fft_preprocess_collate_fn(batch):
+        def frequency_preprocess_collate_fn(batch):
             """
-            Takes a batch of (raw_eeg, label), applies FFT to raw_eeg, and returns tensors.
+            Takes a batch of (raw_eeg, label), applies FFT to raw_eeg, and returns magnitude tensors.
             """
             eeg_data = torch.stack([item[0] for item in batch]) # Shape: (B, 1, Nc, Tp)
             labels = torch.stack([item[1] for item in batch])   # Shape: (B, 1)
 
             fft_result = torch.fft.fft(eeg_data, n=nfft, dim=-1) / (Tp / 2)
-            real_part = torch.real(fft_result[..., fft_index_start:fft_index_end])
-            imag_part = torch.imag(fft_result[..., fft_index_start:fft_index_end])
-            features = torch.cat([real_part, imag_part], dim=-1).float()
+            fft_slice = fft_result[..., fft_index_start:fft_index_end]
+            
+            if preprocess_method == 'frequency': # Magnitude only
+                features = torch.abs(fft_slice).float()
+            elif preprocess_method == 'fft': # Real and Imaginary
+                real_part = torch.real(fft_slice)
+                imag_part = torch.imag(fft_slice)
+                features = torch.cat([real_part, imag_part], dim=-1).float()
+            else:
+                raise ValueError(f"Unsupported FFT-based preprocess_method: '{preprocess_method}'")
             return features, labels
-        return fft_preprocess_collate_fn
+        return frequency_preprocess_collate_fn
 
     elif preprocess_method == 'raw':
         def raw_preprocess_collate_fn(batch):
@@ -202,32 +209,30 @@ def build_model_from_config(config: dict) -> SSVEPformer:
     metadata_params = config['data_metadata']
 
     # --- Dynamically calculate token_dim based on preprocessing method ---
-    preprocess_method = model_specific_params.get('preprocess_method', 'fft')
-    if preprocess_method == 'fft':
+    preprocess_method = model_specific_params.get('preprocess_method', 'frequency')
+    if preprocess_method == 'frequency':
         resolution = model_specific_params['resolution']
         start_freq = model_specific_params['start_freq']
         end_freq = model_specific_params['end_freq']
-        fft_index_start = int(round(start_freq / resolution))
-        fft_index_end = int(round(end_freq / resolution))
-        # Multiply by 2 for real and imaginary parts
-        token_dim = (fft_index_end - fft_index_start) * 2
+        token_dim = int(round(end_freq / resolution)) - int(round(start_freq / resolution))
+    elif preprocess_method == 'fft':
+        resolution = model_specific_params['resolution']
+        start_freq = model_specific_params['start_freq']
+        end_freq = model_specific_params['end_freq']
+        token_dim = 2 * (int(round(end_freq / resolution)) - int(round(start_freq / resolution)))
     elif preprocess_method == 'raw':
         # For raw data, the feature dimension is the number of time points
         token_dim = int(metadata_params['Window_Size'] * metadata_params['Sample_Frequency'])
     else:
         raise ValueError(f"Unsupported preprocess_method: '{preprocess_method}'")
-    
-    chs_num = len(dataset_params['channels'])
 
-    # Explicitly pass arguments for clarity and robustness
     return SSVEPformer(
         depth=model_specific_params['depth'],
         attention_kernel_size=model_specific_params['attention_kernel_size'],
         dropout=model_specific_params['dropout'],
-        chs_num=chs_num,
+        chs_num=len(dataset_params['channels']),
         class_num=metadata_params['Number_of_Targets'],
-        token_num=model_specific_params['token_num'],
-        token_num=chs_num, # Use number of channels as the number of tokens
+        token_num=model_specific_params.get('token_num', len(dataset_params['channels'])),
         token_dim=token_dim
     )
 

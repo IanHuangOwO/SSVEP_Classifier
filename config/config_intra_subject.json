@@ -2,9 +2,10 @@
   "model_params": {
     "SSVEP_CASViT": {
       "depth": 1,
-      "attention_kernel_size": 3,
+      "embedding_kernel_size": 3,
+      "attention_kernel_size": 9,
       "dropout": 0.5,
-      "token_num": 8,
+      "token_num": 128,
       "preprocess_method": "fft",
       "resolution": 0.25,
       "start_freq": 9,
@@ -12,9 +13,10 @@
     },
     "SSVEPformer": {
       "depth": 1,
-      "attention_kernel_size": 3,
-      "dropout": 0.3,
-      "token_num": 8,
+      "embedding_kernel_size": 3,
+      "attention_kernel_size": 9,
+      "dropout": 0.5,
+      "token_num": 128,
       "preprocess_method": "fft",
       "resolution": 0.25,
       "start_freq": 9,
@@ -22,7 +24,7 @@
     }
   },
   "dataset_params": {
-    "channels": ["PO7", "PO8", "Oz", "O1", "O2"],
+    "channels": ["POz", "PO3", "PO4", "PO7", "PO8", "Oz", "O1", "O2"],
     "trials_to_use": 15
   },
   "training_params": {
@@ -30,7 +32,7 @@
     "dataset_path": "./datas/Dial",
     "subjects": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
     "learning_rate": 0.001,
-    "epochs": 50,
+    "epochs": 20,
     "batch_size": 16,
     "k_folds": 5,
     "device": "cuda"
