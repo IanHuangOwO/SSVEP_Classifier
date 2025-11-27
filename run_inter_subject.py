@@ -25,7 +25,6 @@ def main():
     training_params = main_config['training_params']
     dataset_path = training_params['dataset_path']
     model_name = training_params['model_name']
-    subject_list = training_params['subjects']
     dataset_metadata_path = os.path.join(dataset_path, 'metadata.json')
 
     with open(dataset_metadata_path, 'r') as f:
@@ -33,6 +32,13 @@ def main():
 
     # --- Create a unified config object ---
     config = {**main_config, **metadata_config}
+
+    # --- Determine Subject List ---
+    if training_params.get('subjects') == ["all"]:
+        num_subjects = config['data_metadata']['Number_of_Subjects']
+        subject_list = list(range(1, num_subjects + 1))
+    else:
+        subject_list = training_params['subjects']
 
     results_dir = os.path.join(dataset_path, f"{model_name}_results_inter_subject")
     os.makedirs(results_dir, exist_ok=True)
@@ -70,7 +76,8 @@ def main():
         if best_preds is not None:
             plot_confusion_matrix(best_labels, best_preds, save_dir=results_dir, subject_id=val_subject_id, title_prefix="Inter-Subject")
             
-            if model_name == 'SSVEP_CASViT':
+            # List of models for which Grad-CAM should be generated
+            if model_name in ['SSVEP_CASViT', 'SSVEPformer']:
                 logger.info(f"Generating Grad-CAM visualizations for validation on S{val_subject_id}...")
                 plot_grad_cam_visuals(
                     model=trained_model, 

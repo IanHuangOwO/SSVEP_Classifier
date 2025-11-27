@@ -12,4 +12,4 @@ __pycache__/
 .env
 .devcontainer/
 docker-compose.yml
-./datas/BETA/others
+./datas/BETA/others/

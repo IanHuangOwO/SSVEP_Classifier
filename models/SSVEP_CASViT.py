@@ -268,6 +268,13 @@ def build_model_from_config(config: dict) -> SSVEP_CASViT:
     dataset_params = config['dataset_params']
     metadata_params = config['data_metadata']
 
+    # --- Determine the actual number of channels ---
+    # This logic must match the logic in IO/dataset.py
+    if dataset_params.get('channels') == ["all"]:
+        num_channels = len(metadata_params['channel_names'])
+    else:
+        num_channels = len(dataset_params['channels'])
+
     # --- Dynamically calculate token_dim based on preprocessing method ---
     preprocess_method = model_specific_params.get('preprocess_method', 'frequency')
     if preprocess_method == 'frequency':
@@ -290,7 +297,7 @@ def build_model_from_config(config: dict) -> SSVEP_CASViT:
         depth=model_specific_params['depth'],
         attention_kernel_size=model_specific_params['attention_kernel_size'],
         dropout=model_specific_params['dropout'],
-        chs_num=len(dataset_params['channels']),
+        chs_num=num_channels,
         class_num=metadata_params['Number_of_Targets'],
         token_num=model_specific_params.get('token_num', len(dataset_params['channels'])),
         token_dim=token_dim,

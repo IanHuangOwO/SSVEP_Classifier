@@ -1,5 +1,6 @@
 {
   "data_metadata": {
+    "loading_style": "separate_files",
     "Number_of_Subjects": 10,
     "Window_Size": 4.0,
     "Sample_Frequency": 256,

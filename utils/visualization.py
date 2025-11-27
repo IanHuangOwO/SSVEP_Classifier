@@ -49,36 +49,52 @@ def _get_feature_data(dataset, sorted_labels, config):
         fft_index_end = int(round(end_freq / resolution))
 
         for label_to_find in sorted_labels:
-            try:
-                trial_index = (dataset.label_data == label_to_find).nonzero(as_tuple=True)[0][0].item()
-                raw_eeg_tensor, _ = dataset[trial_index]
+            trial_indices = (dataset.label_data == label_to_find).nonzero(as_tuple=True)[0]
+            if len(trial_indices) == 0:
+                print(f"Visualization Warning: No trials found for label {label_to_find}. Skipping this plot.")
+                continue
+
+            all_magnitudes = []
+            for trial_index in trial_indices:
+                raw_eeg_tensor, _ = dataset[trial_index.item()]
                 
                 fft_result = torch.fft.fft(raw_eeg_tensor, n=nfft, dim=-1) / (Tp / 2)
                 fft_slice = fft_result[..., fft_index_start:fft_index_end]
-
-                # For visualization, we always want to see the magnitude.
-                # If the method is 'fft', the model sees real+imag, but we plot magnitude.
                 magnitudes = torch.abs(fft_slice).squeeze(0).numpy()
+                all_magnitudes.append(magnitudes)
 
-                all_feature_data.append({'features': magnitudes, 'label': label_to_find})
-            except IndexError:
-                continue
+            if all_magnitudes:
+                # Average the magnitudes across all trials for this label
+                avg_magnitudes = np.mean(all_magnitudes, axis=0)
+                all_feature_data.append({'features': avg_magnitudes, 'label': label_to_find})
+
     elif preprocess_method == 'raw':
         for label_to_find in sorted_labels:
-            try:
-                trial_index = (dataset.label_data == label_to_find).nonzero(as_tuple=True)[0][0].item()
-                raw_eeg_tensor, _ = dataset[trial_index]
-                all_feature_data.append({'features': raw_eeg_tensor.squeeze(0).numpy(), 'label': label_to_find})
-            except IndexError:
+            trial_indices = (dataset.label_data == label_to_find).nonzero(as_tuple=True)[0]
+            if len(trial_indices) == 0:
                 print(f"Warning: No trial found for label {label_to_find} in raw feature extraction.")
+                continue
+
+            all_raw_tensors = []
+            for trial_index in trial_indices:
+                raw_eeg_tensor, _ = dataset[trial_index.item()]
+                all_raw_tensors.append(raw_eeg_tensor.squeeze(0).numpy())
+            
+            try:
+                # Average the raw signals across all trials
+                avg_raw_signal = np.mean(all_raw_tensors, axis=0)
+                all_feature_data.append({'features': avg_raw_signal, 'label': label_to_find})
+            except IndexError:
                 continue
     
     return all_feature_data, preprocess_method
 
 def _visualize_per_label(dataset, channel_names, stimulus_map, config):
     """Handles the logic for plotting one feature map per label."""
-    sorted_stimuli = sorted(stimulus_map.items(), key=lambda item: float(item[1]))
-    sorted_labels = [int(item[0]) for item in sorted_stimuli]
+    # The definitive list of labels to plot should come directly from the dataset itself,
+    # not from the stimulus_map, which might be from the wrong metadata file.
+    # We sort them to ensure a consistent plotting order.
+    sorted_labels = sorted(torch.unique(dataset.label_data).tolist())
 
     all_feature_data, preprocess_method = _get_feature_data(dataset, sorted_labels, config)
 
@@ -91,40 +107,51 @@ def _visualize_per_label(dataset, channel_names, stimulus_map, config):
     global_max = max(data['features'].max() for data in all_feature_data)
 
     # --- Create the grid plot ---
-    nrows, ncols = 4, 3
-    fig, axes = plt.subplots(nrows, ncols, figsize=(20, 15))
-    fig.suptitle(f'Feature Maps (Method: {preprocess_method.upper()}) - Subject {dataset.subject_list} - One Trial Per Label', fontsize=16)
+    # Dynamically determine grid size to fit all labels
+    num_labels = len(all_feature_data)
+    ncols = 4
+    nrows = int(np.ceil(num_labels / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(40, nrows * 5), sharex=True, sharey=True)
+    fig.suptitle(f'Feature Maps (Method: {preprocess_method.upper()}) - Subject {dataset.subject_list}', fontsize=16)
     axes = axes.flatten()
 
     for i, data in enumerate(all_feature_data):
         ax = axes[i]
         label = data['label']
-        stimulus_hz = stimulus_map.get(str(label), "Unknown")
+        stimulus_map_key = str(label)
+        stimulus_hz = stimulus_map.get(stimulus_map_key, "Unknown")
         
-        num_bins = data['features'].shape[-1]
-        feature_axis, xlabel, _, _, preprocess_method = _get_plot_params(config, num_bins)
+        features = data['features']
+        num_bins = features.shape[-1]
+        feature_axis, xlabel, bin_width, _, _ = _get_plot_params(config, num_bins)
 
         # Plot the pre-calculated feature data
-        ax.imshow(data['features'], aspect='auto', cmap='viridis',
-                       extent=[feature_axis[0], feature_axis[-1], dataset.Nc - 0.5, -0.5],
-                       vmin=global_min, vmax=global_max)
+        # Adjust the extent to center the bins on the ticks.
+        # The extent should start half a bin-width before the first tick and end half a bin-width after the last tick.
+        x_start = feature_axis[0] - bin_width / 2
+        x_end = feature_axis[-1] + bin_width / 2
+        extent = [x_start, x_end, dataset.Nc - 0.5, -0.5]
+        ax.imshow(features, aspect='auto', cmap='viridis', extent=extent, vmin=global_min, vmax=global_max)
         
         # Add vertical lines for fundamental and harmonics
         if ('freq' in preprocess_method or 'fft' in preprocess_method) and stimulus_hz != "Unknown":
             fundamental_hz = float(stimulus_hz)
             for h in range(1, 4): # Plot fundamental (h=1) and two harmonics
                 harmonic_hz = fundamental_hz * h
-                if feature_axis[0] <= harmonic_hz <= feature_axis[-1]:
+                if len(feature_axis) > 0 and feature_axis[0] <= harmonic_hz <= feature_axis[-1]:
                     linestyle = '--' if h == 1 else ':'
                     ax.axvline(x=harmonic_hz, color='r', linestyle=linestyle, linewidth=1.2)
         
         ax.set_yticks(ticks=np.arange(dataset.Nc), labels=channel_names)
         ax.set_title(f'Label: {label} ({stimulus_hz} Hz)')
-        if i >= (nrows - 1) * ncols: # Only show x-label on bottom row
-            ax.set_xlabel(xlabel)
+
+    # --- Hide unused subplots ---
+    for j in range(num_labels, len(axes)):
+        axes[j].set_visible(False)
+
 
     # --- Final figure adjustments ---
-    fig.subplots_adjust(bottom=0.15, hspace=0.4, wspace=0.3)
+    fig.subplots_adjust(left=0.1, right=0.95, top=0.92, bottom=0.15, hspace=0.4, wspace=0.1)
     
     # Common labels
     fig.text(0.5, 0.04, xlabel, ha='center', va='center', fontsize=14)
@@ -226,51 +253,57 @@ def plot_grad_cam_visuals(model, dataset, config, preprocess_fn, save_dir, subje
     model.to(device)
 
     stimulus_map = config['data_metadata']['stimulus_hz']
-    sorted_stimuli = sorted(stimulus_map.items(), key=lambda item: float(item[1]))
-    sorted_labels = [int(item[0]) for item in sorted_stimuli]
+    # The definitive list of labels to plot should come directly from the dataset itself,
+    # not from the stimulus_map, which might be from the wrong metadata file.
+    # We sort them to ensure a consistent plotting order.
+    sorted_labels = sorted(torch.unique(dataset.label_data).tolist())
+    # Dynamically determine grid size
+    num_labels = len(sorted_labels)
+    ncols = 4  # Keep a fixed number of columns for consistent layout
+    nrows = int(np.ceil(num_labels / ncols))
 
-    nrows, ncols = 3, 4
-    fig = plt.figure(figsize=(30, 22), constrained_layout=True)
+    fig = plt.figure(figsize=(40, 30), constrained_layout=True)
     fig.suptitle(f'Grad-CAM Class Activation Maps - Subject {subject_id}', fontsize=20)
     main_gs = fig.add_gridspec(nrows, ncols, wspace=0.5, hspace=0.6)
 
     for i, label_to_find in enumerate(sorted_labels):
         try:
+            if i >= nrows * ncols:
+                print(f"Warning: Skipping label {label_to_find} as it exceeds the grid size.")
+                continue
             # Find all trials for the current label
             trial_indices = (dataset.label_data == label_to_find).nonzero(as_tuple=True)[0]
             if len(trial_indices) == 0:
                 print(f"Warning: No trials found for label {label_to_find}. Skipping.")
                 continue
             
-            best_confidence = -1
-            best_trial_index = -1
+            # --- Generate Grad-CAM for all trials and average them ---
+            all_grad_cams = []
+            all_features = []
+            for trial_index in trial_indices:
+                raw_eeg_tensor, label_tensor = dataset[trial_index.item()]
+                feature_tensor, _ = preprocess_fn([(raw_eeg_tensor, label_tensor)])
+                feature_tensor = feature_tensor.to(device)
+                feature_tensor.requires_grad_(True)
 
-            # Find the trial where the model is most confident about the correct label
-            with torch.no_grad():
-                for trial_index in trial_indices:
-                    raw_eeg_tensor, label_tensor = dataset[trial_index.item()]
-                    feature_tensor, _ = preprocess_fn([(raw_eeg_tensor, label_tensor)])
-                    feature_tensor = feature_tensor.to(device)
-                    
-                    output = model(feature_tensor)
-                    probs = torch.softmax(output, dim=1)
-                    confidence = probs[0, label_to_find].item()
+                # Generate Grad-CAM for this trial
+                current_grad_cam = _generate_grad_cam(model, feature_tensor, target_class=label_to_find)
+                all_grad_cams.append(current_grad_cam)
+                
+                # Store the features for averaging later
+                input_features_np = feature_tensor.squeeze(0).squeeze(0).cpu().detach().numpy()
+                all_features.append(input_features_np)
 
-                    if confidence > best_confidence:
-                        best_confidence = confidence
-                        best_trial_index = trial_index.item()
-
-            if best_trial_index == -1:
-                print(f"Warning: Could not find a suitable trial for label {label_to_find}. Skipping.")
+            if not all_grad_cams:
+                print(f"Warning: Could not generate any Grad-CAM maps for label {label_to_find}. Skipping.")
                 continue
 
-            # Now, generate Grad-CAM for only the most confident trial
-            raw_eeg_tensor, label_tensor = dataset[best_trial_index]
+            # Average the Grad-CAM maps and the input features
+            grad_cam_map = np.mean(all_grad_cams, axis=0)
+            input_features_np = np.mean(all_features, axis=0)
+
+            # We still need one feature tensor for metadata, can use the last one
             feature_tensor, _ = preprocess_fn([(raw_eeg_tensor, label_tensor)])
-            feature_tensor = feature_tensor.to(device)
-            feature_tensor.requires_grad_(True)
-            grad_cam_map = _generate_grad_cam(model, feature_tensor, target_class=label_to_find)
-            input_features_np = feature_tensor.squeeze(0).squeeze(0).cpu().detach().numpy()
 
             # --- Reverse map from tokens to channels if necessary ---
             num_tokens = grad_cam_map.shape[0]
@@ -300,7 +333,7 @@ def plot_grad_cam_visuals(model, dataset, config, preprocess_fn, save_dir, subje
                 grad_cam_map = np.sqrt(grad_cam_real**2 + grad_cam_imag**2)
             
             # --- Plotting Logic ---
-            nested_gs = main_gs[i].subgridspec(2, 2, width_ratios=(4, 1), height_ratios=(1, 4), wspace=0.05, hspace=0.05)
+            nested_gs = main_gs[i].subgridspec(2, 2, width_ratios=(8, 0.5), height_ratios=(1, 4), wspace=0.02, hspace=0.05)
             ax_heatmap = fig.add_subplot(nested_gs[1, 0])
             ax_bar_x = fig.add_subplot(nested_gs[0, 0], sharex=ax_heatmap)
             ax_bar_y = fig.add_subplot(nested_gs[1, 1], sharey=ax_heatmap)
@@ -310,7 +343,7 @@ def plot_grad_cam_visuals(model, dataset, config, preprocess_fn, save_dir, subje
             heatmap_extent = [feature_axis[0], feature_axis[-1], dataset.Nc - 0.5, -0.5]
 
             ax_heatmap.imshow(input_features_np, aspect='auto', cmap='gray', extent=heatmap_extent)
-            ax_heatmap.imshow(grad_cam_map, aspect='auto', cmap='coolwarm', extent=heatmap_extent, alpha=0.6)
+            ax_heatmap.imshow(grad_cam_map, aspect='auto', cmap='coolwarm', extent=heatmap_extent, alpha=0.3)
 
             # --- Bar Plot Coloring ---
             actual_hz = stimulus_map.get(str(label_to_find), "Unknown")
@@ -331,16 +364,21 @@ def plot_grad_cam_visuals(model, dataset, config, preprocess_fn, save_dir, subje
 
             # Bar plots
             ax_bar_x.bar(feature_axis, grad_cam_map.mean(axis=0), color=bar_colors, width=bar_width)
+            ax_bar_x.bar(feature_axis, grad_cam_map.mean(axis=0), color=bar_colors, width=bar_width, align='center')
             ax_bar_x.set_ylabel("Avg Importance")
             ax_bar_x.set_title(f'Target: {label_to_find} ({actual_hz} Hz)')
             ax_bar_x.tick_params(axis="x", labelbottom=False)
 
             ax_bar_y.barh(np.arange(dataset.Nc), grad_cam_map.mean(axis=1), color='salmon', height=0.8)
+            ax_bar_y.barh(np.arange(dataset.Nc), grad_cam_map.mean(axis=1), color='salmon', height=0.8, align='center')
             ax_bar_y.tick_params(axis="y", labelleft=False)
             ax_bar_y.set_xlabel("Avg Importance")
 
         except Exception as e:
             print(f"Could not generate Grad-CAM for label {label_to_find}. Error: {e}")
+            if i >= nrows * ncols:
+                print(f"Error occurred for label {label_to_find}, which is outside the grid. Cannot plot error message.")
+                continue
             ax = fig.add_subplot(main_gs[i])
             ax.text(0.5, 0.5, f'Error for Label {label_to_find}', ha='center', va='center')
             continue

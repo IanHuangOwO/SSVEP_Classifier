@@ -1,0 +1,331 @@
+{
+  "data_metadata": {
+    "loading_style": "single_file",
+    "Number_of_Subjects": 70,
+    "Window_Size": 4.0,
+    "Sample_Frequency": 250,
+    "Number_of_Targets": 40,
+    "Number_of_Trials": 4,
+    "Number_of_Channels": 64,
+    "channel_names": {
+      "1": "FP1",
+      "2": "FPZ",
+      "3": "FP2",
+      "4": "AF3",
+      "5": "AF4",
+      "6": "F7",
+      "7": "F5",
+      "8": "F3",
+      "9": "F1",
+      "10": "FZ",
+      "11": "F2",
+      "12": "F4",
+      "13": "F6",
+      "14": "F8",
+      "15": "FT7",
+      "16": "FC5",
+      "17": "FC3",
+      "18": "FC1",
+      "19": "FCz",
+      "20": "FC2",
+      "21": "FC4",
+      "22": "FC6",
+      "23": "FT8",
+      "24": "T7",
+      "25": "C5",
+      "26": "C3",
+      "27": "C1",
+      "28": "Cz",
+      "29": "C2",
+      "30": "C4",
+      "31": "C6",
+      "32": "T8",
+      "33": "M1",
+      "34": "TP7",
+      "35": "CP5",
+      "36": "CP3",
+      "37": "CP1",
+      "38": "CPZ",
+      "39": "CP2",
+      "40": "CP4",
+      "41": "CP6",
+      "42": "TP8",
+      "43": "M2",
+      "44": "P7",
+      "45": "P5",
+      "46": "P3",
+      "47": "P1",
+      "48": "PZ",
+      "49": "P2",
+      "50": "P4",
+      "51": "P6",
+      "52": "P8",
+      "53": "PO7",
+      "54": "PO5",
+      "55": "PO3",
+      "56": "POz",
+      "57": "PO4",
+      "58": "PO6",
+      "59": "PO8",
+      "60": "CB1",
+      "61": "O1",
+      "62": "Oz",
+      "63": "O2",
+      "64": "CB2"
+    },
+    "stimulus_hz": {
+      "0": 8.6,
+      "1": 8.8,
+      "2": 9.0,
+      "3": 9.2,
+      "4": 9.4,
+      "5": 9.6,
+      "6": 9.8,
+      "7": 10.0,
+      "8": 10.2,
+      "9": 10.4,
+      "10": 10.6,
+      "11": 10.8, 
+      "12": 11.0,
+      "13": 11.2,
+      "14": 11.4,
+      "15": 11.6,
+      "16": 11.8,
+      "17": 12.0,
+      "18": 12.2,
+      "19": 12.4,
+      "20": 12.6,
+      "21": 12.8,
+      "22": 13.0,
+      "23": 13.2,
+      "24": 13.4,
+      "25": 13.6,
+      "26": 13.8,
+      "27": 14.0,
+      "28": 14.2,
+      "29": 14.4,
+      "30": 14.6,
+      "31": 14.8, 
+      "32": 15.0,
+      "33": 15.2,
+      "34": 15.4,
+      "35": 15.6,
+      "36": 15.8,
+      "37": 8.0,
+      "38": 8.2,
+      "39": 8.4
+    }
+  },
+  "data_structure": {
+    "1": {
+      "file": "signals_labels/S01.mat"
+    },
+    "2": {
+      "file": "signals_labels/S02.mat"
+    },
+    "3": {
+      "file": "signals_labels/S03.mat"
+    },
+    "4": {
+      "file": "signals_labels/S04.mat"
+    },
+    "5": {
+      "file": "signals_labels/S05.mat"
+    },
+    "6": {
+      "file": "signals_labels/S06.mat"
+    },
+    "7": {
+      "file": "signals_labels/S07.mat"
+    },
+    "8": {
+      "file": "signals_labels/S08.mat"
+    },
+    "9": {
+      "file": "signals_labels/S09.mat"
+    },
+    "10": {
+      "file": "signals_labels/S10.mat"
+    },
+    "11": {
+      "file": "signals_labels/S11.mat"
+    },
+    "12": {
+      "file": "signals_labels/S12.mat"
+    },
+    "13": {
+      "file": "signals_labels/S13.mat"
+    },
+    "14": {
+      "file": "signals_labels/S14.mat"
+    },
+    "15": {
+      "file": "signals_labels/S15.mat"
+    },
+    "16": {
+      "file": "signals_labels/S16.mat"
+    },
+    "17": {
+      "file": "signals_labels/S17.mat"
+    },
+    "18": {
+      "file": "signals_labels/S18.mat"
+    },
+    "19": {
+      "file": "signals_labels/S19.mat"
+    },
+    "20": {
+      "file": "signals_labels/S20.mat"
+    },
+    "21": {
+      "file": "signals_labels/S21.mat"
+    },
+    "22": {
+      "file": "signals_labels/S22.mat"
+    },
+    "23": {
+      "file": "signals_labels/S23.mat"
+    },
+    "24": {
+      "file": "signals_labels/S24.mat"
+    },
+    "25": {
+      "file": "signals_labels/S25.mat"
+    },
+    "26": {
+      "file": "signals_labels/S26.mat"
+    },
+    "27": {
+      "file": "signals_labels/S27.mat"
+    },
+    "28": {
+      "file": "signals_labels/S28.mat"
+    },
+    "29": {
+      "file": "signals_labels/S29.mat"
+    },
+    "30": {
+      "file": "signals_labels/S30.mat"
+    },
+    "31": {
+      "file": "signals_labels/S31.mat"
+    },
+    "32": {
+      "file": "signals_labels/S32.mat"
+    },
+    "33": {
+      "file": "signals_labels/S33.mat"
+    },
+    "34": {
+      "file": "signals_labels/S34.mat"
+    },
+    "35": {
+      "file": "signals_labels/S35.mat"
+    },
+    "36": {
+      "file": "signals_labels/S36.mat"
+    },
+    "37": {
+      "file": "signals_labels/S37.mat"
+    },
+    "38": {
+      "file": "signals_labels/S38.mat"
+    },
+    "39": {
+      "file": "signals_labels/S39.mat"
+    },
+    "40": {
+      "file": "signals_labels/S40.mat"
+    },
+    "41": {
+      "file": "signals_labels/S41.mat"
+    },
+    "42": {
+      "file": "signals_labels/S42.mat"
+    },
+    "43": {
+      "file": "signals_labels/S43.mat"
+    },
+    "44": {
+      "file": "signals_labels/S44.mat"
+    },
+    "45": {
+      "file": "signals_labels/S45.mat"
+    },
+    "46": {
+      "file": "signals_labels/S46.mat"
+    },
+    "47": {
+      "file": "signals_labels/S47.mat"
+    },
+    "48": {
+      "file": "signals_labels/S48.mat"
+    },
+    "49": {
+      "file": "signals_labels/S49.mat"
+    },
+    "50": {
+      "file": "signals_labels/S50.mat"
+    },
+    "51": {
+      "file": "signals_labels/S51.mat"
+    },
+    "52": {
+      "file": "signals_labels/S52.mat"
+    },
+    "53": {
+      "file": "signals_labels/S53.mat"
+    },
+    "54": {
+      "file": "signals_labels/S54.mat"
+    },
+    "55": {
+      "file": "signals_labels/S55.mat"
+    },
+    "56": {
+      "file": "signals_labels/S56.mat"
+    },
+    "57": {
+      "file": "signals_labels/S57.mat"
+    },
+    "58": {
+      "file": "signals_labels/S58.mat"
+    },
+    "59": {
+      "file": "signals_labels/S59.mat"
+    },
+    "60": {
+      "file": "signals_labels/S60.mat"
+    },
+    "61": {
+      "file": "signals_labels/S61.mat"
+    },
+    "62": {
+      "file": "signals_labels/S62.mat"
+    },
+    "63": {
+      "file": "signals_labels/S63.mat"
+    },
+    "64": {
+      "file": "signals_labels/S64.mat"
+    },
+    "65": {
+      "file": "signals_labels/S65.mat"
+    },
+    "66": {
+      "file": "signals_labels/S66.mat"
+    },
+    "67": {
+      "file": "signals_labels/S67.mat"
+    },
+    "68": {
+      "file": "signals_labels/S68.mat"
+    },
+    "69": {
+      "file": "signals_labels/S69.mat"
+    },
+    "70": {
+      "file": "signals_labels/S70.mat"
+    }
+  }
+}

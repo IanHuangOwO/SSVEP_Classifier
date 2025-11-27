@@ -53,7 +53,6 @@ class Trainer:
 
                 # Handle models that may return attention weights during eval
                 outputs = self.model(eeg_features)
-                outputs = self.model(eeg_features)
                 loss = self.loss_calculator.calculate(outputs, labels)
 
                 total_loss += loss.item()
