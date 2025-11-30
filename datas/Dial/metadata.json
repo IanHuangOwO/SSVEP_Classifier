@@ -8,28 +8,76 @@
     "Number_of_Trials": 15,
     "Number_of_Channels": 8,
     "stimulus_hz": {
-      "0": "9.25",
-      "3": "9.75",
-      "6": "10.25",
-      "9": "10.75",
-      "1": "11.25",
-      "4": "11.75",
-      "7": "12.25",
-      "10": "12.75",
-      "2": "13.25",
-      "5": "13.75",
-      "8": "14.25",
-      "11": "14.75"
+      "0": 9.25,
+      "1": 11.25,
+      "2": 13.25,
+      "3": 9.75,
+      "4": 11.75,
+      "5": 13.75,
+      "6": 10.25,
+      "7": 12.25,
+      "8": 14.25,
+      "9": 10.75,
+      "10": 12.75,
+      "11": 14.75
     },
-    "channel_names": {
-      "0": "O1",
-      "1": "Oz",
-      "2": "O2",
-      "3": "PO3",
-      "4": "POz",
-      "5": "PO4",
-      "6": "PO7",
-      "7": "PO8"
+    "channels": {
+      "1": {
+        "label": "O1",
+        "coordinates": {
+          "polar_angle_deg": -162,
+          "polar_radius": 0.51111
+        }
+      },
+      "2": {
+        "label": "Oz",
+        "coordinates": {
+          "polar_angle_deg": 180,
+          "polar_radius": 0.51111
+        }
+      },
+      "3": {
+        "label": "O2",
+        "coordinates": {
+          "polar_angle_deg": 162,
+          "polar_radius": 0.51111
+        }
+      },
+      "4": {
+        "label": "PO3",
+        "coordinates": {
+          "polar_angle_deg": -157,
+          "polar_radius": 0.41111
+        }
+      },
+      "5": {
+        "label": "POz",
+        "coordinates": {
+          "polar_angle_deg": 180,
+          "polar_radius": 0.38333
+        }
+      },
+      "6": {
+        "label": "PO4",
+        "coordinates": {
+          "polar_angle_deg": 157,
+          "polar_radius": 0.41111
+        }
+      },
+      "7": {
+        "label": "PO7",
+        "coordinates": {
+          "polar_angle_deg": -144,
+          "polar_radius": 0.51111
+        }
+      },
+      "8": {
+        "label": "PO8",
+        "coordinates": {
+          "polar_angle_deg": 144,
+          "polar_radius": 0.51111
+        }
+      }
     }
   }
   ,

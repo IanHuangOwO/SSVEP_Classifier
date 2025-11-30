@@ -10,7 +10,7 @@ class SSVEPDataset(Dataset):
    """
    A PyTorch Dataset class for SSVEP data, configured via a metadata JSON file.
    """
-   def __init__(self, data_root, data_structure, all_channel_names, desired_channels, Nf, Nt, Ws, Fs, trials_to_use, loading_style, subject_list=[1]):
+   def __init__(self, data_root, data_structure, all_channels_metadata, desired_channels, Nf, Nt, Ws, Fs, trials_to_use, loading_style, subject_list=[1]):
        super(SSVEPDataset, self).__init__()
        
        # File paths and subject info
@@ -31,9 +31,12 @@ class SSVEPDataset(Dataset):
        self.Tp = int(Ws * Fs)       # number of time points
 
        # --- Map desired channel names to indices in the raw data ---
-       # Create a reverse mapping from name to index for all available channels
-       # The channel indices in metadata are 1-based, so we subtract 1 for 0-based Python indexing.
-       all_channels_map = {name: int(i) - 1 for i, name in all_channel_names.items()}
+       # Create a mapping from channel label to its 0-based index.
+       # The keys in the JSON ("1", "2", etc.) are 1-based channel numbers.
+       all_channels_map = {
+           info['label']: int(key) - 1
+           for key, info in all_channels_metadata.items() if 'label' in info
+       }
        # Get the indices for the channels we want to use
        self.channel_indices = [all_channels_map[name] for name in desired_channels if name in all_channels_map]
 
@@ -218,16 +221,23 @@ def build_dataset_from_config(config: dict, **kwargs):
             subject_list = training_params.get('subjects', [1])
 
     # --- Determine Channel List ---
-    # Check if "all" is specified for channels
+    # The new structure is a dictionary of channel objects. We need to extract the labels.
+    all_channels_metadata = data_metadata['channels']
+    
+    # Get an ordered list of all available channel labels by sorting on the numeric key
+    all_channel_labels = [
+        info['label'] for key, info in sorted(all_channels_metadata.items(), key=lambda item: int(item[0]))
+    ]
+
     if dataset_params.get('channels') == ["all"]:
-        desired_channels = list(data_metadata['channel_names'].values())
+        desired_channels = all_channel_labels
     else:
         desired_channels = dataset_params['channels']
 
     return SSVEPDataset(
         data_root=data_root,
         data_structure=config['data_structure'],
-        all_channel_names=data_metadata['channel_names'],
+        all_channels_metadata=all_channels_metadata,
         desired_channels=desired_channels,
         trials_to_use=dataset_params['trials_to_use'],
         Nf=data_metadata['Number_of_Targets'],
